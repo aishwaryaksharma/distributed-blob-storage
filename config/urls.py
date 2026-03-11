@@ -17,11 +17,12 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
-from blobstore.views import system_health_check
+from blobstore.views import home_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', system_health_check, name='health-check'), # The Root URL
-
+    # path('', system_health_check, name='health-check'), # The Root URL
+    path('', home_view, name='home'), # The Root URL
+    
     path('api/', include('blobstore.urls')), # Include blobstore app URLs
 ]

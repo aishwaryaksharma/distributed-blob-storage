@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BlobStore Dashboard</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; }
+        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        #progress-container { width: 100%; background: #eee; height: 10px; display: none; margin-top: 10px; }
+        #progress-bar { width: 0%; background: #28a745; height: 100%; transition: width 0.2s; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #eee; }
+    </style>
+</head>
+<body>
+    <h1>📦 BlobStore Engine</h1>
+
+    <div class="card">
+        <h3>Upload New Blob</h3>
+        <input type="file" id="fileInput">
+        <button onclick="uploadFile()">Upload</button>
+        <div id="progress-container"><div id="progress-bar"></div></div>
+        <p id="status"></p>
+    </div>
+
+    <div class="card">
+        <h3>Recent Uploads</h3>
+        <table id="blobTable">
+            <thead>
+                <tr>
+                    <th>Filename</th>
+                    <th>Size (bytes)</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            const bar = document.getElementById('progress-bar');
+            const container = document.getElementById('progress-container');
+            const status = document.getElementById('status');
+
+            if (!fileInput.files[0]) return alert("Select a file!");
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            container.style.display = 'block';
+            status.innerText = "Uploading...";
+
+            // Using XMLHttpRequest for progress tracking (Fetch doesn't support upload progress yet)
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/api/upload/', true);
+
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const percent = (e.loaded / e.total) * 100;
+                    bar.style.width = percent + '%';
+                }
+            };
+
+            xhr.onload = function() {
+                if (xhr.status === 201) {
+                    status.innerText = "Upload Successful!";
+                    location.reload(); // Refresh to show new file in table
+                } else {
+                    status.innerText = "Upload Failed.";
+                }
+            };
+
+            xhr.send(formData);
+        }
+
+
+
+        // Function to fetch and display the blob list
+        async function loadBlobs() {
+            const tableBody = document.querySelector('#blobTable tbody');
+            tableBody.innerHTML = '<tr><td colspan="3">Loading storage data...</td></tr>';
+
+            try {
+                const response = await fetch('/api/list/'); // Ensure this matches your urls.py
+                const blobs = await response.json();
+
+                tableBody.innerHTML = ''; // Clear loading message
+
+                if (blobs.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="3">No files stored yet.</td></tr>';
+                    return;
+                }
+
+                blobs.forEach(blob => {
+                    const row = `
+                        <tr>
+                            <td><strong>${blob.filename}</strong></td>
+                            <td>${(blob.size / 1024).toFixed(2)} KB</td>
+                            <td>
+                                <a href="${blob.download_url}" target="_blank">
+                                    <button style="cursor:pointer">Download</button>
+                                </a>
+                                <button onclick="deleteBlob('${blob.id}')" style="cursor:pointer; color: red; margin-left: 10px;">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                    tableBody.insertAdjacentHTML('beforeend', row);
+                });
+            } catch (error) {
+                tableBody.innerHTML = '<tr><td colspan="3" style="color:red">Error loading files.</td></tr>';
+            }
+        }
+
+        // Initial load
+        window.onload = loadBlobs;
+
+
+        async function deleteBlob(blobId) {
+            if (!confirm("WARNING: This will permanently delete the file from our servers. This cannot be undone. Proceed?")) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/delete/${blobId}/`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken') // Django requires CSRF for DELETE
+                    }
+                });
+
+                if (response.ok) {
+                    await loadBlobs();
+                    // Remove the row from the UI immediately for a "snappy" feel
+                    document.getElementById(`row-${blobId}`).remove();
+                } else {
+                    alert("Delete failed.");
+                }
+            } catch (error) {
+                console.error("Error:", error);
+            }
+        }
+
+        // Helper to get CSRF token from cookies
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+    </script>
+</body>
+</html>
